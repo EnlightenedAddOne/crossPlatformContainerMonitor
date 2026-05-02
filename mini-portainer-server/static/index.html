@@ -1,0 +1,147 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MINI PORTAINER GLOBAL</title>
+    <link rel="stylesheet" href="style.css">
+    <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
+    <script type="module" src="https://unpkg.com/ionicons@7.1.0/dist/ionicons/ionicons.esm.js"></script>
+    <script nomodule src="https://unpkg.com/ionicons@7.1.0/dist/ionicons/ionicons.js"></script>
+</head>
+
+<body>
+    <div id="app" v-cloak>
+        <header>
+            <div class="brand">
+                <ion-icon name="speedometer-outline" class="logo-icon"></ion-icon>
+                <h1>{{ t.title }}</h1>
+            </div>
+            <div class="global-stats">
+                <button class="lang-btn" @click="toggleLang">
+                    <ion-icon name="language-outline"></ion-icon>
+                    {{ t.switchLang }}
+                </button>
+                <span class="stat-item">
+                    <span class="status-dot" :class="{ online: isConnected }"></span>
+                    {{ isConnected ? t.apiOnline : t.apiOffline }}
+                </span>
+                <span class="stat-item">{{ t.nodes }}: {{ Object.keys(nodes).length }}</span>
+                <span class="stat-item refresh-timer">{{ t.refresh }}: {{ countdown }}s</span>
+            </div>
+        </header>
+
+        <main>
+            <div class="grid-container" v-if="Object.keys(nodes).length > 0">
+                <div class="node-card" v-for="(data, name) in nodes" :key="name">
+                    <div class="card-header">
+                        <div class="node-title">
+                            <ion-icon
+                                :name="name.includes('Pi') ? 'hardware-chip-outline' : 'cloud-done-outline'"></ion-icon>
+                            <h2>{{ name }}</h2>
+                        </div>
+                        <span class="sync-tag">{{ t.sync }}: {{ formatTime(data.last_update) }}</span>
+                    </div>
+
+                    <div class="hardware-grid">
+                        <div class="metric-box">
+                            <ion-icon name="thermometer-outline" class="m-icon"></ion-icon>
+                            <div class="metric-data">
+                                <span class="label">{{ t.cpuTemp }}</span>
+                                <span class="value" v-if="data.cpu_temp > 0" :class="{ danger: data.cpu_temp > 60 }">
+                                    {{ data.cpu_temp.toFixed(1) }} °C
+                                </span>
+                                <span class="value muted" v-else>N/A</span>
+                            </div>
+                        </div>
+                        <div class="metric-box">
+                            <ion-icon name="pie-chart-outline" class="m-icon"></ion-icon>
+                            <div class="metric-data">
+                                <span class="label">{{ t.ramUsage }}</span>
+                                <span class="value">{{ data.mem_used_mb }} / {{ data.mem_total_mb }} MB</span>
+                                <div class="progress-bar-bg">
+                                    <div class="progress-bar-fill"
+                                        :style="{ width: (data.mem_used_mb / data.mem_total_mb * 100) + '%' }"></div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="container-section">
+                        <h3><ion-icon name="layers-outline"></ion-icon> {{ t.containers }} ({{ data.containers?.length
+                            || 0 }})</h3>
+                        <div class="ctr-table-wrapper">
+                            <table>
+                                <thead>
+                                    <tr>
+                                        <th>{{ t.colName }}</th>
+                                        <th>{{ t.colId }}</th>
+                                        <th>{{ t.colStatus }}</th>
+                                        <th class="action-col">{{ t.colAction }}</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <tr v-for="ctr in data.containers" :key="ctr.id">
+                                        <td class="ctr-name-cell">
+                                            <ion-icon :name="getCtrIcon(ctr.name)" class="ctr-icon"></ion-icon>
+                                            {{ ctr.name }}
+                                        </td>
+                                        <td class="mono muted">{{ ctr.id }}</td>
+                                        <td>
+                                            <span class="status-badge" :class="ctr.state">
+                                                {{ ctr.state }}
+                                            </span>
+                                        </td>
+                                        <td class="action-cell">
+                                            <button v-if="ctr.state !== 'running'" class="action-btn btn-start"
+                                                @click="sendCommand(name, 'start', ctr.id)" :title="t.btnStart">
+                                                <ion-icon name="play"></ion-icon>
+                                            </button>
+                                            <button v-if="ctr.state === 'running'" class="action-btn btn-stop"
+                                                @click="sendCommand(name, 'stop', ctr.id)" :title="t.btnStop">
+                                                <ion-icon name="square"></ion-icon>
+                                            </button>
+                                            <button class="action-btn btn-restart"
+                                                @click="sendCommand(name, 'restart', ctr.id)" :title="t.btnRestart">
+                                                <ion-icon name="refresh"></ion-icon>
+                                            </button>
+                                            <button class="action-btn btn-log" @click="viewLogs(name, ctr)"
+                                                title="查看快照日志">
+                                                <ion-icon name="document-text-outline"></ion-icon>
+                                            </button>
+                                        </td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="empty-state" v-else>
+                <ion-icon name="pulse-outline" class="empty-icon"></ion-icon>
+                <p>{{ t.waiting }}</p>
+            </div>
+        </main>
+        <div class="modal-overlay" v-if="logModal.show" @click.self="closeLogs">
+            <div class="log-terminal">
+                <div class="term-header">
+                    <div class="term-title"><ion-icon name="terminal"></ion-icon> root@{{ logModal.node }} : ~ / logs /
+                        {{ logModal.containerName }}</div>
+                    <button class="term-close" @click="closeLogs"><ion-icon name="close"></ion-icon></button>
+                </div>
+                <div class="term-body" id="term-body">
+                    <div v-if="!logModal.content" class="term-loading">
+                        <ion-icon name="sync-outline" class="spin"></ion-icon>
+                        <span>正在向边缘 Agent 发送拉取指令，请稍候...</span>
+                    </div>
+                    <pre v-else>{{ logModal.content }}</pre>
+                </div>
+            </div>
+        </div>
+    </div>
+    <script src="app.js"></script>
+</body>
+
+</html>
