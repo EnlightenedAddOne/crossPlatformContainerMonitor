@@ -96,6 +96,9 @@ crossPlatformContainerMonitor/
 - `task.md`：项目早期设计记录
 - `agent_pi64`、`agent_aliyun`、`server_linux`：目录中已有的编译产物
 
+<img width="1891" height="1021" alt="Mini Portainer Agent" src="https://github.com/user-attachments/assets/04196b7c-93a4-47f8-bc43-9c0a706c253f" />
+
+
 ## 使用说明
 
 ### 1. 环境要求
